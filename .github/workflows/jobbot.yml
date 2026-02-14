@@ -1,27 +1,42 @@
-name: Job Bot
+import json
+import os
+import hashlib
+import requests
+from bs4 import BeautifulSoup
 
-on:
-  schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch:
+URL = "https://sainsburys.jobs/jobs?full_time=&part_time=on&fixed_term=&filter_by=&location=eh14+4as&keywords="
+STATE_FILE = "seen_jobs.json"
 
-jobs:
-  run-bot:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
+TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "").strip()
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
+# اگر این = 1 باشد، هر بار یک پیام تست می‌فرستد
+ALWAYS_SEND_TEST = os.environ.get("ALWAYS_SEND_TEST", "0").strip() == "1"
 
-      - name: Install dependencies
-        run: pip install requests beautifulsoup4
 
-      - name: Run bot
-        env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        run: python sainsburys_watch.py
+def send_telegram(text: str):
+    if not TG_BOT_TOKEN or not TG_CHAT_ID:
+        raise RuntimeError("Missing TG_BOT_TOKEN or TG_CHAT_ID. Check GitHub Secrets.")
+
+    api = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+    r = requests.post(api, data={"chat_id": TG_CHAT_ID, "text": text}, timeout=25)
+
+    if r.status_code != 200:
+        # متن دقیق خطای تلگرام را نشان می‌دهد
+        raise RuntimeError(f"Telegram error {r.status_code}: {r.text}")
+
+
+def load_seen():
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    except FileNotFoundError:
+        return set()
+    except Exception as e:
+        raise RuntimeError(f"Failed to read {STATE_FILE}: {e}")
+
+
+def save_seen(seen):
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(sorted(list(seen)), f, ensure_ascii=False, in_
